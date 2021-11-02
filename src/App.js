@@ -1,90 +1,80 @@
-import React, {useState, useCallback} from 'react';
-import './App.css';
-import {Controls} from "./components/Controls";
+import React, { useState, useCallback } from "react";
+import { interval } from "rxjs";
+import { Controls } from "./components/Controls";
+
+import "./App.css";
+
+const delay = 1000;
 
 function App() {
   const [timer, setTimer] = useState({
     hours: 0,
     minutes: 0,
-    seconds: 0
+    seconds: 0,
   });
-  const [intervalId, setIntervalId] = useState(null);
+  const [prev, setPrev] = useState(0);
+  const [subscriptions, setSubscriptions] = useState(null);
 
-  const timerBody = () => {
-    setTimer((current) => {
-      let seconds = current.seconds + 1;
-      let minutes = current.minutes;
-      let hours = current.hours;
-
-      if (seconds >= 60) {
-        minutes = minutes + 1;
-        seconds = 0;
-      }
-
-      if (minutes >= 60) {
-        hours = hours + 1;
-        minutes = 0;
-      }
-
-      return {
-        hours,
-        minutes,
-        seconds,
-      }
+  const timerBody = (value) => {
+    setPrev(value);
+    const seconds = value % 60;
+    const minutes = Math.floor((value % 3600) / 60);
+    const hours = Math.floor(value / 3600);
+    setTimer({
+      seconds,
+      minutes,
+      hours,
     });
   };
 
-  const startTimer = useCallback(() => {
-    const Id = setInterval(() => timerBody(), 1000);
-    setIntervalId(Id);
-  }, []);
+  const runTimer = () => {
+    if (!subscriptions) {
+      const startTimer = interval(delay).subscribe((value) => {
+        timerBody(value + prev);
+      });
+      setSubscriptions(startTimer);
+    } else {
+      subscriptions.unsubscribe();
+      setTimer({
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+      });
+      setSubscriptions(null);
+    }
+  };
 
-  const stopTimer = useCallback(() => {
-    clearInterval(intervalId);
+  const pauseTimer = useCallback((event) => {
+    if (event.detail === 2) {
+      subscriptions.unsubscribe();
+      setSubscriptions(null);
+    }
+  }, [subscriptions]);
+
+  const resetTimer = useCallback(() => {
+    subscriptions && subscriptions.unsubscribe();
     setTimer({
       hours: 0,
       minutes: 0,
-      seconds: 0
+      seconds: 0,
     });
-    setIntervalId(null);
-  }, [intervalId]);
+    const startTimer = interval(delay).subscribe((value) => {
+      timerBody(value);
+    });
+    setSubscriptions(startTimer);
+  }, [subscriptions]);
 
-  const runTimer = useCallback(() => {
-    if (intervalId) {
-      stopTimer();
-    } else {
-      startTimer();
-    }
-  }, [intervalId, stopTimer, startTimer]);
-
-
-  const pauseTimer = useCallback((event) => {
-    if (event.detail === 2 && intervalId) {
-      clearInterval(intervalId);
-      setIntervalId(null);
-    }
-  }, [intervalId]);
-
-  const resetTimer = useCallback(() => {
-    stopTimer();
-    startTimer();
-  }, [stopTimer, startTimer]);
-
-  const {hours, minutes, seconds} = timer;
+  const { hours, minutes, seconds } = timer;
 
   return (
     <div className="App">
       {hours < 10 ? `0${hours}` : hours}
-      {' : '}
+      {" : "}
       {minutes < 10 ? `0${minutes}` : minutes}
-      {' : '}
+      {" : "}
       {seconds < 10 ? `0${seconds}` : seconds}
 
-      <Controls
-        onStart={runTimer}
-        onWait={pauseTimer}
-        onReset={resetTimer}
-      />
+      <Controls onStart={runTimer} onWait={pauseTimer} onReset={resetTimer} />
     </div>
   );
 }
